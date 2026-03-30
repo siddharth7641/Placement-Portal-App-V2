@@ -7,7 +7,7 @@ class User(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     username = db.Column(db.String(80), unique=True, nullable=False)
     password = db.Column(db.String(200), nullable=False)
-    role = db.Column(db.String(20), nullable=False) # 'admin', 'company', 'student'
+    role = db.Column(db.String(20), default = 'student', nullable = False) # 'admin', 'company', 'student'
     
     # Relationships to profiles
     student_profile = db.relationship('StudentProfile', backref='user', uselist=False)
@@ -15,7 +15,7 @@ class User(db.Model):
 
 class CompanyProfile(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    company_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
     name = db.Column(db.String(100), nullable=False)
     website = db.Column(db.String(100))
     is_approved = db.Column(db.Boolean, default=False)
@@ -23,7 +23,7 @@ class CompanyProfile(db.Model):
 
 class StudentProfile(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    student_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
     full_name = db.Column(db.String(100), nullable=False)
     cgpa = db.Column(db.Float, nullable=False)
     branch = db.Column(db.String(50))

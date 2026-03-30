@@ -1,16 +1,25 @@
-import os
+from flask_cors import CORS
 from flask import Flask
-from flask_sqlalchemy import SQLAlchemy
 from werkzeug.security import generate_password_hash
-from models import db, User, CompanyProfile, StudentProfile # Importing from our models file
+from config import LocalDevelopmentConfig
+from models import db, User, CompanyProfile, StudentProfile 
+from security import jwt, JWTManager
 
-app = Flask(__name__)
+app = None
 
-app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///' + os.path.join( 'database.sqlite')
-app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
-app.config['SECRET_KEY'] = 'your_super_secret_key_here' # Needed for JWT/Sessions later
+def create_app():
+    app = Flask(__name__)
+    app.config.from_object(LocalDevelopmentConfig)
+    CORS(app)
+    db.init_app(app)
+    app.config['JWT_SECRET_KEY'] = 'this-is-a-super-secret-key-12345'
+    jwt.init_app(app)
+    app.app_context().push()
+    return app
 
-db.init_app(app)
+app = create_app()
+
+from routes import *
 
 def create_database():
     with app.app_context():
@@ -19,21 +28,20 @@ def create_database():
         admin = User.query.filter_by(role='admin').first()
         if not admin:
             print("No Admin found. Creating default admin...")
-            hashed_pw = generate_password_hash('admin123') # Default password
             new_admin = User(
-                username='admin@institute.edu', 
-                password=hashed_pw, 
+                username='admin', 
+                password=generate_password_hash('admin123'), 
                 role='admin'
             )
-            db.session.add(new_admin)
+            student = User(username='student',password=generate_password_hash('student123'),)
+            company = User(username='company',password=generate_password_hash('company123'),role='company')
+            db.session.add_all([new_admin, student, company])
             db.session.commit()
-            print("Admin 'admin@institute.edu' created successfully.")
+            print("Admin 'admin' created successfully.")
         else:
             print("Admin already exists. Skipping creation.")
 
-@app.route('/')
-def index():
-    return {"message": "Placement Portal API is running!"}
+
 
 if __name__ == '__main__':
     create_database() 
