@@ -1,1 +1,4 @@
 commands.md
+backend/uploads/
+backend/offer_letters/
+backend/seed_db.py

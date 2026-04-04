@@ -19,28 +19,56 @@ const router = createRouter({
       component: () => import('./views/RegisterView.vue')
     },
     {
-      path: '/admin',
+      path: '/admin/login', 
       name: 'adminLogin',
-      component: () => import('./views/AdminLogin.vue')
+      component: () => import('./views/admin/AdminLogin.vue')
     },
-    // {
-    //   path: '/admin-dashboard',
-    //   name: 'admin',
-    //   component: () => import('./views/AdminDashboard.vue'),
-    //   meta: { requiresAuth: true, role: 'admin' }
-    // },
-    // {
-    //   path: '/student-dashboard',
-    //   name: 'student',
-    //   component: () => import('./views/StudentDashboard.vue'),
-    //   meta: { requiresAuth: true, role: 'student' }
-    // },
-    // {
-    //   path: '/company-dashboard',
-    //   name: 'company',
-    //   component: () => import('./views/CompanyDashboard.vue'),
-    //   meta: { requiresAuth: true, role: 'company' }
-    // }
+    {
+      path: '/admin',
+      component: () => import('./views/admin/AdminLayout.vue'),
+      meta: { requiresAuth: true, role: 'admin' },
+      children: [
+        { 
+          path: 'dashboard', 
+          name: 'adminDashboard',
+          component: () => import('./views/admin/AdminDashboard.vue') 
+        },
+      ]
+    },
+    {
+      path: '/company',
+      component: () => import('./views/company/CompanyLayout.vue'),
+      meta: { requiresAuth: true, role: 'company' }, 
+      children: [
+        { 
+          path: 'dashboard', 
+          name: 'companyDashboard',
+          component: () => import('./views/company/CompanyDashboard.vue') 
+        },
+        {
+          path: 'post-drive',
+          name: 'companyPostDrive',
+          component: () => import('./views/company/PostDrive.vue')
+        },
+        {
+          path: 'drive/:id/applications',
+          name: 'companyDriveApplications',
+          component: () => import('./views/company/DriveApplications.vue')
+        }
+      ]
+    },
+    {
+      path: '/student',
+      component: () => import('./views/student/StudentLayout.vue'), // Using the master layout!
+      meta: { requiresAuth: true, role: 'student' },
+      children: [
+        { 
+          path: 'dashboard', 
+          name: 'studentDashboard',
+          component: () => import('./views/student/StudentDashboard.vue') 
+        }
+      ]
+    },
   ]
 })
 
@@ -50,14 +78,18 @@ router.beforeEach((to, from, next) => {
 
   if (to.meta.requiresAuth) {
     if (!token) {
-      return next('/login');
+      return next(to.path.startsWith('/admin') ? '/admin/login' : '/login');
     }
+    
     if (to.meta.role && to.meta.role !== userRole) {
+      // Direct them to their proper dashboard path
+      if (userRole === 'admin') return next('/admin/dashboard');
       return next(`/${userRole}-dashboard`);
     }
   }
 
-  if (to.name === 'login' && token) {
+  if ((to.name === 'login' || to.name === 'adminLogin') && token) {
+    if (userRole === 'admin') return next('/admin/dashboard');
     return next(`/${userRole}-dashboard`);
   }
 

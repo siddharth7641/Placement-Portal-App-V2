@@ -1,9 +1,11 @@
 from flask_cors import CORS
-from flask import Flask
+from flask import Flask, send_from_directory, request
+from werkzeug.utils import secure_filename
 from werkzeug.security import generate_password_hash
 from config import LocalDevelopmentConfig
 from models import db, User, CompanyProfile, StudentProfile 
 from security import jwt, JWTManager
+import os
 
 app = None
 
@@ -13,6 +15,12 @@ def create_app():
     CORS(app)
     db.init_app(app)
     app.config['JWT_SECRET_KEY'] = 'this-is-a-super-secret-key-12345'
+    UPLOAD_FOLDER = os.path.join(os.getcwd(), 'uploads', 'resumes')
+    os.makedirs(UPLOAD_FOLDER, exist_ok=True) # Automatically creates the folder if it doesn't exist
+    OFFER_FOLDER = os.path.join(os.getcwd(), 'offer_letters')
+    os.makedirs(OFFER_FOLDER, exist_ok=True)
+    app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
+    app.config['OFFER_FOLDER'] = OFFER_FOLDER   
     jwt.init_app(app)
     app.app_context().push()
     return app

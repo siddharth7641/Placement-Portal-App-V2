@@ -75,7 +75,7 @@ export default {
       .then(res => {
         localStorage.setItem("access_token", res.data.access_token)
         localStorage.setItem("user_role", res.data.role)
-        this.$router.push(`/${res.data.role}-dashboard`)
+        this.$router.push(`/${res.data.role}/dashboard`)
       })
       .catch(err => {
         if (err.response && err.response.data && err.response.data.message) {
