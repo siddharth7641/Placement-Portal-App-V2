@@ -48,6 +48,7 @@ class PlacementDrive(db.Model):
     experience_required = db.Column(db.String(100), nullable=True)
     salary = db.Column(db.String(100), nullable=True)
     benefits = db.Column(db.Text, nullable=True)
+    deadline = db.Column(db.DateTime, nullable=True)
 
 class Application(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -55,6 +56,6 @@ class Application(db.Model):
     drive_id = db.Column(db.Integer, db.ForeignKey('placement_drive.id'), nullable=False)
     status = db.Column(db.String(20), default='Applied')
     date_applied = db.Column(db.DateTime, default=datetime.utcnow)
-    interview_date = db.Column(db.String(100), nullable=True)
+    interview_date = db.Column(db.Date, nullable=True)
     feedback = db.Column(db.Text, nullable=True)
     offer_letter_path = db.Column(db.String(255), nullable=True)

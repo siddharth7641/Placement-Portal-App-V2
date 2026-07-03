@@ -15,24 +15,38 @@
 
     <div v-else class="row">
       <div class="col-md-6 mb-4" v-if="companies.length > 0">
-        <h6 class="text-secondary border-bottom pb-2">Organizations ({{ companies.length }})</h6>
-        <ul class="list-group shadow-sm">
-          <li v-for="company in companies" :key="'src-comp-'+company.id" class="list-group-item d-flex justify-content-between align-items-center border-0 mb-1 rounded">
-            <span class="fw-semibold text-dark">{{ company.name }}</span>
-            <button @click="$emit('blacklist-company', company.id)" class="btn btn-sm btn-outline-danger px-3 rounded-pill">blacklist</button>
-          </li>
-        </ul>
-      </div>
+          <h5 class="text-secondary mb-2">Companies Found ({{ companies.length }})</h5>
+          <ul class="list-group">
+            <li v-for="company in companies" :key="'search-comp-'+company.id" class="list-group-item d-flex justify-content-between align-items-center">
+              
+              <div>
+                <span class="text-muted small me-2">#{{ company.id }}</span>
+                <span class="fw-medium">{{ company.name }}</span>
+              </div>
+              
+              <div class="d-flex gap-2">
+                <button class="btn btn-sm btn-outline-danger px-3 rounded-pill" @click="$emit('blacklist-company', company.id)">Blacklist</button>
+              </div>
+            </li>
+          </ul>
+        </div>
 
       <div class="col-md-6 mb-4" v-if="students.length > 0">
-        <h6 class="text-secondary border-bottom pb-2">Students ({{ students.length }})</h6>
-        <ul class="list-group shadow-sm">
-          <li v-for="student in students" :key="'src-stu-'+student.id" class="list-group-item d-flex justify-content-between align-items-center border-0 mb-1 rounded">
-            <span class="fw-semibold text-dark">{{ student.name }}</span>
-            <button @click="$emit('blacklist-student', student.id)" class="btn btn-sm btn-outline-danger px-3 rounded-pill">blacklist</button>
-          </li>
-        </ul>
-      </div>
+          <h5 class="text-secondary mb-2">Students Found ({{ students.length }})</h5>
+          <ul class="list-group">
+            <li v-for="student in students" :key="'search-stu-'+student.id" class="list-group-item d-flex justify-content-between align-items-center">
+              
+              <div>
+                <span class="text-muted small me-2">#{{ student.id }}</span>
+                <span class="fw-medium">{{ student.name }}</span>
+              </div>
+              
+              <div class="d-flex gap-2">
+                <button class="btn btn-sm btn-outline-danger px-3 rounded-pill" @click="$emit('blacklist-student', student.id)">Blacklist</button>
+              </div>
+            </li>
+          </ul>
+        </div>
 
       <div class="col-12 mb-4" v-if="drives.length > 0">
         <h6 class="text-secondary border-bottom pb-2">Drives ({{ drives.length }})</h6>

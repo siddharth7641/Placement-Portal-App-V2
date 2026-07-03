@@ -6,21 +6,65 @@
         <i class="fa-solid fa-plus me-2"></i> Post a New Job
       </button>
     </div>
+
     <div v-if="!currentView">
       <div class="card shadow-sm border-0 mb-5 bg-light">
         <div class="card-body p-4">
           <div class="row">
             <div class="col-md-8">
-              <h5 class="text-secondary mb-3"><i class="fa-solid fa-building me-2"></i>Company Overview</h5>
-              <p v-if="website" class="mb-2">
-                <i class="fa-solid fa-globe me-2 text-primary"></i>
-                <a :href="website" target="_blank" class="text-decoration-none">{{ website }}</a>
-              </p>
-              <p class="text-dark small lh-lg mb-0">{{ aboutUs || "No overview provided yet." }}</p>
+              
+              <div class="d-flex justify-content-between align-items-center mb-3">
+                <h5 class="text-secondary mb-0"><i class="fa-solid fa-building me-2"></i>Company Overview</h5>
+                <button v-if="!isEditingProfile" @click="startEditing" class="btn btn-sm btn-outline-primary rounded-pill px-3">
+                  <i class="fa-solid fa-pen me-1"></i> Edit
+                </button>
+                <div v-else class="d-flex gap-2">
+                  <button @click="saveProfile" class="btn btn-sm btn-success rounded-pill px-3">Save</button>
+                  <button @click="isEditingProfile = false" class="btn btn-sm btn-outline-secondary rounded-pill px-3">Cancel</button>
+                </div>
+              </div>
+
+              <div v-if="!isEditingProfile">
+                <p v-if="website" class="mb-2">
+                  <i class="fa-solid fa-globe me-2 text-primary"></i>
+                  <a :href="website" target="_blank" class="text-decoration-none">{{ website }}</a>
+                </p>
+                <p v-else class="text-muted small mb-2"><i class="fa-solid fa-link me-1"></i>No website added</p>
+                <p class="text-dark small lh-lg mb-4" style="white-space: pre-line;">{{ aboutUs || "No overview provided yet." }}</p>
+              </div>
+
+              <div v-else class="mb-4 bg-white p-3 rounded border">
+                <div class="mb-2">
+                  <label class="form-label text-secondary fw-semibold small mb-1">Company Name</label>
+                  <input type="text" class="form-control form-control-sm" v-model="editForm.name" placeholder="Enter company name">
+                </div>
+                <div class="mb-2">
+                  <label class="form-label text-secondary fw-semibold small mb-1">Website URL</label>
+                  <input type="url" class="form-control form-control-sm" v-model="editForm.website" placeholder="https://www.example.com">
+                </div>
+                <div class="mb-2">
+                  <label class="form-label text-secondary fw-semibold small mb-1">About Us</label>
+                  <textarea class="form-control form-control-sm" v-model="editForm.about_us" rows="4" placeholder="Tell students about your company..."></textarea>
+                </div>
+                <div class="mb-2">
+                  <label class="form-label text-secondary fw-semibold small mb-1">Email</label>
+                  <input type="email" class="form-control form-control-sm" v-model="editForm.email" placeholder="Enter company email">
+                </div>
+              </div>
+
+              <button 
+                @click="exportHistory" 
+                class="btn btn-sm btn-outline-success rounded-pill px-4 shadow-sm"
+                :disabled="isExporting || isEditingProfile"
+                >
+                <span v-if="isExporting"><i class="fa-solid fa-spinner fa-spin me-2"></i> Generating CSV...</span>
+                <span v-else><i class="fa-solid fa-file-csv me-1"></i> Export History</span>
+              </button>
             </div>
           </div>
         </div>
       </div>
+      
       <div class="mb-5">
         <h5 class="text-secondary mb-3"><i class="fa-solid fa-briefcase me-2"></i>Active Job Postings ({{ upcomingDrives.length }})</h5>
         <div class="table-responsive border rounded bg-white shadow-sm">
@@ -51,6 +95,9 @@
                   </button>
                   <button v-if="drive.status === 'Approved'" @click="closeDrive(drive.id)" class="btn btn-sm btn-outline-danger rounded-pill px-3">
                     Close Job
+                  </button>
+                  <button @click="deleteDrive(drive.id)" class="btn btn-sm btn-danger rounded-pill px-3 shadow-sm">
+                    <i class="fa-solid fa-trash me-1"></i> Delete
                   </button>
                 </td>
               </tr>
@@ -87,6 +134,7 @@
         </div>
       </div>
     </div>
+    
     <div v-else-if="currentView === 'postJob'" class="card shadow-sm border-0">
       <div class="card-body p-4">
         <div class="d-flex justify-content-between align-items-center mb-4">
@@ -123,6 +171,10 @@
               <label class="form-label fw-semibold text-muted small">Perks & Benefits</label>
               <input type="text" class="form-control" v-model="jobForm.benefits" placeholder="e.g. Health Insurance, WFH setup">
             </div>
+            <div class="col-md-6">
+              <label class="form-label fw-semibold text-muted small">Deadline</label>
+              <input type="date" class="form-control" v-model="jobForm.deadline" required>
+            </div>
             <div class="col-12">
               <label class="form-label fw-semibold text-muted small">Full Job Description *</label>
               <textarea class="form-control" v-model="jobForm.job_description" rows="5" required></textarea>
@@ -134,6 +186,7 @@
         </form>
       </div>
     </div>
+    
     <div v-else-if="currentView === 'applicants'" class="card shadow-sm border-0">
       <div class="card-body p-4">
         <div class="d-flex justify-content-between align-items-center mb-4 pb-3 border-bottom">
@@ -198,7 +251,7 @@
                   </div>
                   <div class="col-md-3">
                     <label class="form-label small text-muted">Interview Date / Time</label>
-                    <input type="text" class="form-control form-control-sm" placeholder="e.g. Oct 15, 2:00 PM" v-model="app.newInterview">
+                    <input type="date" class="form-control form-control-sm" v-model="app.newInterview">
                   </div>
                   <div class="col-md-5">
                     <label class="form-label small text-muted">Feedback to Student</label>
@@ -242,6 +295,17 @@ export default {
       website: '',
       upcomingDrives: [],
       closedDrives: [],
+      isExporting: false,
+      
+      // State for the Edit Profile Form
+      isEditingProfile: false,
+      editForm: {
+        name: '',
+        email: '',
+        website: '',
+        about_us: ''
+      },
+
       jobForm: {
         job_title: '',
         branch: '',
@@ -250,7 +314,8 @@ export default {
         experience_required: '',
         salary: '',
         benefits: '',
-        job_description: ''
+        job_description: '',
+        deadline: ''
       },
       activeDriveId: null,
       activeDriveName: '',
@@ -278,6 +343,35 @@ export default {
         }
       });
     },
+
+    startEditing() {
+      this.editForm = {
+        name: this.companyName || '',
+        website: this.website || '',
+        about_us: this.aboutUs || ''
+      };
+      this.isEditingProfile = true;
+    },
+
+    saveProfile() {
+      const token = localStorage.getItem('access_token');
+      axios.put('http://127.0.0.1:5000/api/company/profile', this.editForm, {
+        headers: { "Authorization": `Bearer ${token}` }
+      })
+      .then(res => {
+        this.companyName = this.editForm.name;
+        this.website = this.editForm.website;
+        this.aboutUs = this.editForm.about_us;
+        
+        this.isEditingProfile = false;
+        alert("Profile updated successfully!");
+      })
+      .catch(err => {
+        console.error("Error updating profile:", err);
+        alert("Failed to update profile. Please try again.");
+      });
+    },
+
     submitNewJob() {
       const token = localStorage.getItem('access_token');
       axios.post("http://127.0.0.1:5000/api/company/post-drive", this.jobForm, {
@@ -339,6 +433,23 @@ export default {
       })
       .catch(err => alert("Error closing drive."));
     },
+    deleteDrive(driveId) {
+      const confirmMsg = "WARNING: Are you sure you want to completely delete this job posting?\n\nThis will permanently erase the job AND all student applications associated with it. This action CANNOT be undone.";
+      
+      if(!confirm(confirmMsg)) return;
+      const token = localStorage.getItem('access_token');
+      axios.delete(`http://127.0.0.1:5000/api/company/drive/${driveId}`, {
+        headers: { "Authorization": `Bearer ${token}` }
+      })
+      .then(res => {
+        alert(res.data.message);
+        this.fetchDashboardData();
+      })
+      .catch(err => {
+        console.error("Error deleting drive:", err);
+        alert("There was an error permanently deleting the job posting.");
+      });
+    },
     downloadResume(filename) {
       const token = localStorage.getItem('access_token');
       axios.get(`http://127.0.0.1:5000/api/download-resume/${filename}`, {
@@ -380,7 +491,53 @@ export default {
         if(app) app.offer_letter_path = res.data.path;
       })
       .catch(err => alert("Error uploading the offer letter."));
-    }
+    },
+    exportHistory() {
+      this.isExporting = true;
+      const token = localStorage.getItem('access_token');
+      
+      axios.post("http://127.0.0.1:5000/api/company/export-csv", {}, {
+        headers: { "Authorization": `Bearer ${token}` }
+      })
+      .then(res => {
+        const taskId = res.data.task_id;
+        this.pollExportStatus(taskId);
+      })
+      .catch(err => {
+        this.isExporting = false;
+        alert("Error starting the export process.");
+      });
+    },
+    pollExportStatus(taskId) {
+      const token = localStorage.getItem('access_token');
+      const checkStatus = () => {
+        axios.get(`http://127.0.0.1:5000/api/download-export/${taskId}`, {
+          headers: { "Authorization": `Bearer ${token}` },
+          responseType: 'blob'
+        })
+        .then(res => {
+          if (res.status === 202) {
+            setTimeout(checkStatus, 2000);
+          } else if (res.status === 200) {
+            this.isExporting = false;
+            
+            const url = window.URL.createObjectURL(new Blob([res.data]));
+            const link = document.createElement('a');
+            link.href = url;
+            link.setAttribute('download', `Application_History.csv`);
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+          }
+        })
+        .catch(err => {
+          this.isExporting = false;
+          alert("Error downloading the export file.");
+        });
+      };
+      
+      checkStatus();
+    },
   },
   mounted() {
     this.fetchDashboardData();

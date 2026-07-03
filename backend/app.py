@@ -1,11 +1,13 @@
 from flask_cors import CORS
-from flask import Flask, send_from_directory, request
-from werkzeug.utils import secure_filename
+from flask import Flask
 from werkzeug.security import generate_password_hash
 from config import LocalDevelopmentConfig
-from models import db, User, CompanyProfile, StudentProfile 
-from security import jwt, JWTManager
+from models import db, User 
+from security import jwt
 import os
+from celery_init import celery_init_app
+from celery.schedules import crontab
+from cache import cache
 
 app = None
 
@@ -16,16 +18,22 @@ def create_app():
     db.init_app(app)
     app.config['JWT_SECRET_KEY'] = 'this-is-a-super-secret-key-12345'
     UPLOAD_FOLDER = os.path.join(os.getcwd(), 'uploads', 'resumes')
-    os.makedirs(UPLOAD_FOLDER, exist_ok=True) # Automatically creates the folder if it doesn't exist
+    os.makedirs(UPLOAD_FOLDER, exist_ok=True) 
     OFFER_FOLDER = os.path.join(os.getcwd(), 'offer_letters')
     os.makedirs(OFFER_FOLDER, exist_ok=True)
     app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
     app.config['OFFER_FOLDER'] = OFFER_FOLDER   
     jwt.init_app(app)
+    app.config['CACHE_TYPE'] = 'RedisCache'
+    app.config['CACHE_REDIS_URL'] = 'redis://127.0.0.1:6379/1'
+    app.config['CACHE_DEFAULT_TIMEOUT'] = 300 # Default expiry: 5 minute
+    cache.init_app(app)
     app.app_context().push()
     return app
 
 app = create_app()
+celery = celery_init_app(app)
+celery.autodiscover_tasks()
 
 from routes import *
 
@@ -49,7 +57,28 @@ def create_database():
         else:
             print("Admin already exists. Skipping creation.")
 
-
+celery.conf.beat_schedule = {
+    'auto-close-expired-drives': {
+        'task': 'close_expired_drives',
+        'schedule': crontab(), #hour=0, minute=0
+    },
+    'daily-interview-reminders': {
+        'task': 'send_daily_interview_reminders', 
+        'schedule': crontab(), #hour=8, minute=0
+    },
+    'monthly-company-reports': {
+        'task': 'generate_monthly_company_reports',
+        'schedule': crontab(),#minute=0, hour=0, day_of_month='1'
+    },
+    'admin-monthly-report': {
+        'task': 'generate_admin_monthly_report',
+        'schedule': crontab(),#minute=0, hour=0, day_of_month='1'
+    },
+    'daily-deadline-notifications': {
+        'task': 'send_daily_deadline_reminders',
+        'schedule': crontab(), #hour=8, minute=0
+    },
+}
 
 if __name__ == '__main__':
     create_database() 

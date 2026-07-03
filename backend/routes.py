@@ -1,11 +1,15 @@
-from flask import current_app as app, jsonify, request, abort
+from flask import current_app as app, jsonify, request, send_from_directory
 from models import User, db, StudentProfile, CompanyProfile, Application, PlacementDrive    
 from flask_jwt_extended import create_access_token, current_user, get_jwt_identity, jwt_required
 from werkzeug.security import generate_password_hash, check_password_hash
 from functools import wraps
 import os
+from sqlalchemy import String, cast, or_
 from werkzeug.utils import secure_filename
-from flask import send_from_directory
+from tasks import export_student_applications, export_company_applications
+from datetime import datetime
+from celery.result import AsyncResult
+from cache import cache
 
 # *===============**=====
 # ||   decorator     ||||
@@ -50,7 +54,6 @@ def register():
     elif role == 'company':
         profile = CompanyProfile(user_id=new_user.id, name=data.get('company_name', 'Update Company Name'))
         db.session.add(profile)
-    
     db.session.commit()
     return jsonify({"message": f"{role.capitalize()} registered successfully"}), 201
 
@@ -67,14 +70,12 @@ def login():
             company_profile = CompanyProfile.query.filter_by(user_id=user.id).first()
             if not company_profile.is_approved:
                 return jsonify({"message": "Your company account is not approved yet."}), 403
-
         access_token = create_access_token(identity=user)
         return jsonify(access_token=access_token, role=user.role), 200
-
     return jsonify({"message": "Invalid credentials"}), 401
 
 @app.route('/api/download-resume/<filename>', methods=['GET'])
-@jwt_required() # Works for admin, company, or student!
+@jwt_required()
 def download_resume(filename):
     try:
         return send_from_directory(app.config['UPLOAD_FOLDER'], filename)
@@ -83,14 +84,55 @@ def download_resume(filename):
     
 @app.route('/api/download-offer/<filename>', methods=['GET'])
 def download_offer(filename):
-    import os
-    from flask import send_from_directory
-    
-    # 2. DEFINE THE FOLDER HERE TOO
     OFFER_FOLDER = os.path.join(os.getcwd(), 'offer_letters')
-    
     return send_from_directory(OFFER_FOLDER, filename)
-    
+
+@app.route('/api/download-export/<task_id>', methods=['GET'])
+@jwt_required()
+def download_csv_export(task_id):
+    task_result = AsyncResult(task_id)
+    if task_result.state == 'PENDING':
+        return jsonify({"message": "File is still generating...", "status": "Pending"}), 202
+    elif task_result.state == 'SUCCESS':
+        filename = task_result.result 
+        EXPORT_FOLDER = os.path.join(os.getcwd(), 'static', 'exports')
+        return send_from_directory(EXPORT_FOLDER, filename, as_attachment=True)
+    return jsonify({"message": "Task failed"}), 500
+
+@app.route('/api/company_details/<int:company_id>', methods=['GET'])
+@jwt_required()
+def company_details(company_id):
+    company = CompanyProfile.query.get_or_404(company_id)
+    drives = PlacementDrive.query.filter_by(company_id=company.id, status='Approved').all()
+    return jsonify({
+        "id": company.id,
+        "name": company.name,
+        "overview": company.about_us or "No company overview provided yet.",
+        "website": company.website,
+        "drives": [{
+            "id": d.id,
+            "job_title": d.job_title,
+            "job_description": d.job_description
+        } for d in drives]
+    }), 200
+
+@app.route('/api/student_details/<int:student_id>', methods=['GET'])
+@jwt_required()
+def student_details(student_id):
+    student = StudentProfile.query.get_or_404(student_id)
+    applications = Application.query.filter_by(student_id=student.id).all()
+    return jsonify({
+        "id": student.id,
+        "name": student.full_name,
+        "email": student.email,
+        "phone": student.phone,
+        "applications": [{
+            "id": app.id,
+            "drive_id": app.drive_id,
+            "status": app.status
+        } for app in applications]
+    }), 200
+
 # *===============**===============**===============**===============**===============**===============**===============*
 # ||   ADMIN     ||||   ADMIN     ||||   ADMIN     ||||   ADMIN     ||||   ADMIN     ||||   ADMIN     ||||   ADMIN     ||
 # *===============**===============**===============**===============**===============**===============**===============*
@@ -230,6 +272,7 @@ def company_action(company_id):
         company.is_approved = True
         user_account.is_blacklisted = False
         db.session.commit()
+        cache.delete('cached_org_list')
         return jsonify({"message": f"{company.name} approved!"}), 200
     elif action == 'reject':
         user = User.query.get(company.user_id)
@@ -271,6 +314,7 @@ def admin_drive_action(drive_id):
         drive.status = 'Rejected'
         message = f"Drive '{drive.job_title}' has been rejected."
     db.session.commit()
+    cache.delete('cached_available_drives')
     return jsonify({"message": message}), 200
 
 @app.route('/api/admin/student-action/<int:student_id>', methods=['POST'])
@@ -298,7 +342,67 @@ def admin_close_drive(drive_id):
         return jsonify({"message": "Drive not found or unauthorized."}), 404
     drive.status = 'Closed'
     db.session.commit()
+    cache.delete('cached_available_drives')
     return jsonify({"message": "Drive officially closed!"}), 200
+
+@app.route('/api/admin/search', methods=['GET'])
+@role_required('admin')
+@cache.cached(timeout=120, query_string=True) 
+def admin_global_search():
+    search_term = request.args.get('q', '').strip()
+    if not search_term:
+        return jsonify({"companies": [], "students": [], "drives": [], "applications": []}), 200
+
+    like_term = f"%{search_term}%"
+    companies = CompanyProfile.query.filter(
+        or_(
+            CompanyProfile.name.ilike(like_term),
+            cast(CompanyProfile.id, String).ilike(like_term),
+            CompanyProfile.email.ilike(like_term),
+            CompanyProfile.phone.ilike(like_term)
+        )
+    ).all()
+    comp_list = [{"id": c.id, "name": c.name} for c in companies]
+
+    students = StudentProfile.query.filter(
+        or_(
+            StudentProfile.full_name.ilike(like_term),
+            cast(StudentProfile.id, String).ilike(like_term),
+            StudentProfile.email.ilike(like_term),
+            StudentProfile.phone.ilike(like_term)
+        )
+    ).all()
+    stu_list = [{"id": s.id, "name": s.full_name} for s in students]
+
+    drives = PlacementDrive.query.filter(PlacementDrive.job_title.ilike(like_term)).all()
+    drive_list = [{"id": d.id, "name": d.job_title, "company": d.company.name, "status": d.status, "deadline": d.deadline, "min_cgpa": d.min_cgpa, "branch": d.branch, "description": d.job_description} for d in drives]
+
+    applications = Application.query.all()
+    app_list = []
+    for app in applications:
+        student = StudentProfile.query.get(app.student_id)
+        drive = PlacementDrive.query.get(app.drive_id)
+        company = CompanyProfile.query.get(drive.company_id) if drive else None
+        
+        if (search_term.lower() in student.full_name.lower() or 
+            search_term.lower() in drive.job_title.lower() or 
+            (company and search_term.lower() in company.name.lower())):
+            
+            app_list.append({
+                "id": app.id,
+                "studentName": student.full_name,
+                "driveName": drive.job_title,
+                "companyName": company.name if company else "Unknown",
+                "date": app.date_applied.strftime("%d/%m/%Y")
+            })
+
+    return jsonify({
+        "companies": comp_list,
+        "students": stu_list,
+        "drives": drive_list,
+        "applications": app_list
+    }), 200
+
 
 # *===============**===============**===============**===============**===============**===============**===============*
 # ||   COMPANY   ||||   COMPANY   ||||   COMPANY   ||||   COMPANY   ||||   COMPANY   ||||   COMPANY   ||||   COMPANY   ||
@@ -343,6 +447,8 @@ def update_company_profile():
         company.about_us = data['about_us']
     if 'website' in data:
         company.website = data['website']
+    if 'email' in data:
+        company.email = data['email']
     db.session.commit()
     return jsonify({"message": "Company profile updated successfully!"}), 200
 
@@ -362,11 +468,26 @@ def post_new_drive():
         required_skills=data.get('required_skills'),
         experience_required=data.get('experience_required'),
         salary=data.get('salary'),
-        benefits=data.get('benefits')
+        benefits=data.get('benefits'),
+        deadline=datetime.strptime(data.get('deadline'), '%Y-%m-%d').date()
     )
     db.session.add(new_drive)
     db.session.commit()
     return jsonify({"message": "Job posted successfully! Pending Admin approval."}), 201
+
+@app.route('/api/company/drive/<int:drive_id>', methods=['DELETE'])
+@role_required('company')
+def delete_drive(drive_id):
+    drive = PlacementDrive.query.get_or_404(drive_id)
+    company = CompanyProfile.query.filter_by(user_id=current_user.id).first()
+    if drive.company_id != company.id:
+        return jsonify({"error": "Unauthorized to delete this drive"}), 403
+    Application.query.filter_by(drive_id=drive.id).delete()
+    db.session.delete(drive)
+    db.session.commit()
+    cache.delete('cached_available_drives')
+    
+    return jsonify({"message": "Job posting and all related student applications have been permanently deleted."}), 200
 
 @app.route('/api/company/drive/<int:drive_id>/applicants', methods=['GET'])
 @role_required('company')
@@ -413,8 +534,10 @@ def update_application_status(app_id):
     if 'feedback' in data:
         application.feedback = data['feedback']
     if 'interview_date' in data:
-        application.interview_date = data['interview_date']
-    db.session.commit()
+            date_string = data['interview_date']
+            if date_string: 
+                application.interview_date = datetime.strptime(date_string, '%Y-%m-%d').date()
+            db.session.commit()
     return jsonify({"message": f"Student marked as {application.status} successfully."}), 200
 
 @app.route('/api/company/drive/<int:drive_id>/close', methods=['POST'])
@@ -426,6 +549,7 @@ def close_drive(drive_id):
         return jsonify({"message": "Drive not found or unauthorized."}), 404
     drive.status = 'Closed'
     db.session.commit()
+    cache.delete('cached_available_drives')
     return jsonify({"message": "Drive officially closed!"}), 200
 
 @app.route('/api/company/application/<int:app_id>/upload-offer', methods=['POST'])
@@ -451,6 +575,16 @@ def upload_offer_letter(app_id):
         db.session.commit()
         return jsonify({"message": "Offer letter uploaded successfully!", "path": unique_filename}), 200
 
+@app.route('/api/company/export-csv', methods=['POST'])
+@role_required('company')
+def trigger_company_csv_export():
+    company = CompanyProfile.query.filter_by(user_id=current_user.id).first()
+    if not company:
+        return jsonify({"message": "Company profile not found."}), 404
+    task = export_company_applications.delay(company.id)
+    return jsonify({"message": "Company CSV export started!", "task_id": task.id}), 202
+
+
 # *===============**===============**===============**===============**===============**===============**===============*
 # ||   STUDENT   ||||   STUDENT   ||||   STUDENT   ||||   STUDENT   ||||   STUDENT   ||||   STUDENT   ||||   STUDENT   ||
 # *===============**===============**===============**===============**===============**===============**===============*
@@ -461,21 +595,27 @@ def student_dashboard():
     student = StudentProfile.query.filter_by(user_id=current_user.id).first()
     if not student:
         return jsonify({"message": "Student profile not found."}), 404
-    companies = CompanyProfile.query.filter_by(is_approved=True).all()
-    org_list = [{"id": c.id, "name": c.name} for c in companies]
-    active_drives = PlacementDrive.query.filter_by(status='Approved').all()
-    available_drives = []
-    for d in active_drives:
-        comp = CompanyProfile.query.get(d.company_id)
-        available_drives.append({
-            "id": d.id,
-            "job_title": d.job_title,
-            "company_name": comp.name if comp else "Unknown",
-            "branch": d.branch,
-            "min_cgpa": d.min_cgpa,
-            "description": d.job_description,
-            "skills" : d.required_skills,
-        })
+    org_list = cache.get('cached_org_list')
+    if org_list is None:
+        companies = CompanyProfile.query.filter_by(is_approved=True).all()
+        org_list = [{"id": c.id, "name": c.name} for c in companies]
+        cache.set('cached_org_list', org_list, timeout=3600) 
+    available_drives = cache.get('cached_available_drives')
+    if available_drives is None:
+        active_drives = PlacementDrive.query.filter_by(status='Approved').all()
+        available_drives = []
+        for d in active_drives:
+            comp = CompanyProfile.query.get(d.company_id)
+            available_drives.append({
+                "id": d.id,
+                "job_title": d.job_title,
+                "company_name": comp.name if comp else "Unknown",
+                "branch": d.branch,
+                "min_cgpa": d.min_cgpa,
+                "description": d.job_description,
+                "skills" : d.required_skills,
+            })
+        cache.set('cached_available_drives', available_drives, timeout=300) 
     my_apps = Application.query.filter_by(student_id=student.id).all()
     applied_list = []
     for app in my_apps:
@@ -549,6 +689,8 @@ def student_history():
 def apply_for_job(drive_id):
     student = StudentProfile.query.filter_by(user_id=current_user.id).first()
     drive = PlacementDrive.query.get(drive_id)
+    if drive.status == 'Closed' or (drive.deadline and datetime.now() > drive.deadline):
+        return jsonify({"error": "The deadline for this placement drive has passed."}), 403
     if not student or not drive:
         return jsonify({"message": "Invalid request."}), 404
     existing_application = Application.query.filter_by(student_id=student.id, drive_id=drive_id).first()
@@ -602,3 +744,13 @@ def upload_resume():
     student.resume_path = filename
     db.session.commit()
     return jsonify({"message": "Resume uploaded successfully!", "filename": filename}), 200
+
+@app.route('/api/student/export-csv', methods=['POST'])
+@role_required('student')
+def trigger_csv_export():
+    student = StudentProfile.query.filter_by(user_id=current_user.id).first()
+    task = export_student_applications.delay(student.id)
+    return jsonify({"message": "CSV export started!", "task_id": task.id}), 202
+
+
+
