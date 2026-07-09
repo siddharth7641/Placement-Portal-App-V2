@@ -3,4 +3,5 @@ backend/uploads/
 backend/offer_letters/
 backend/seed_db.py
 backend/.env/
+backend/instance/
 
