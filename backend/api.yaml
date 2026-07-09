@@ -1,0 +1,675 @@
+openapi: 3.0.0
+info:
+  title: Campus Placement Management System API
+  description: Backend REST API for managing placement drives, companies, and student applications.
+  version: 1.0.0
+servers:
+  - url: http://127.0.0.1:5000
+    description: Local Flask Development Server
+
+tags:
+  - name: Authentication
+    description: User registration and login
+  - name: General
+    description: Universal routes accessible by multiple roles
+  - name: Admin
+    description: Administrator dashboard and moderation endpoints
+  - name: Company
+    description: Company profile and placement drive management
+  - name: Student
+    description: Student profile and application workflows
+
+paths:
+  # ==========================================
+  # AUTHENTICATION
+  # ==========================================
+  /api/register:
+    post:
+      tags:
+        - Authentication
+      summary: Register a new user
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - username
+                - password
+                - role
+              properties:
+                username:
+                  type: string
+                password:
+                  type: string
+                role:
+                  type: string
+                  enum: [student, company, admin]
+                full_name:
+                  type: string
+                  description: Required if role is student
+                company_name:
+                  type: string
+                  description: Required if role is company
+      responses:
+        '201':
+          description: User registered successfully
+        '400':
+          description: Missing required fields
+        '409':
+          description: Username already exists
+
+  /api/login:
+    post:
+      tags:
+        - Authentication
+      summary: Authenticate user
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - username
+                - password
+              properties:
+                username:
+                  type: string
+                password:
+                  type: string
+      responses:
+        '200':
+          description: Login successful
+        '401':
+          description: Invalid credentials
+        '403':
+          description: Account suspended or pending approval
+
+  /api/admin/login:
+    post:
+      tags:
+        - Authentication
+      summary: Authenticate admin
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - username
+                - password
+              properties:
+                username:
+                  type: string
+                password:
+                  type: string
+      responses:
+        '200':
+          description: Admin login successful
+        '401':
+          description: Invalid admin credentials
+
+  # ==========================================
+  # GENERAL
+  # ==========================================
+  /api/download-resume/{filename}:
+    get:
+      tags:
+        - General
+      summary: Download a student's resume
+      security:
+        - BearerAuth: []
+      parameters:
+        - in: path
+          name: filename
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: File downloaded
+          content:
+            application/pdf:
+              schema:
+                type: string
+                format: binary
+        '404':
+          description: File not found
+
+  /api/download-offer/{filename}:
+    get:
+      tags:
+        - General
+      summary: Download a specific offer letter
+      parameters:
+        - in: path
+          name: filename
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Offer letter PDF downloaded
+
+  /api/download-export/{task_id}:
+    get:
+      tags:
+        - General
+      summary: Check status and download Celery CSV export
+      security:
+        - BearerAuth: []
+      parameters:
+        - in: path
+          name: task_id
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: CSV file downloaded
+        '202':
+          description: File is still generating
+
+  /api/company_details/{company_id}:
+    get:
+      tags:
+        - General
+      summary: Get details of a specific company
+      security:
+        - BearerAuth: []
+      parameters:
+        - in: path
+          name: company_id
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Company details and active drives
+
+  /api/student_details/{student_id}:
+    get:
+      tags:
+        - General
+      summary: Get details of a specific student
+      security:
+        - BearerAuth: []
+      parameters:
+        - in: path
+          name: student_id
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Returns student profile and application history
+
+  # ==========================================
+  # ADMIN
+  # ==========================================
+  /api/admin/dashboard:
+    get:
+      tags:
+        - Admin
+      summary: Fetch admin dashboard statistics
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Returns comprehensive system data (companies, students, drives, applications)
+
+  /api/admin/search:
+    get:
+      tags:
+        - Admin
+      summary: Global cache-enabled search
+      security:
+        - BearerAuth: []
+      parameters:
+        - in: query
+          name: q
+          required: false
+          schema:
+            type: string
+          description: Search term for name, ID, email, or phone
+      responses:
+        '200':
+          description: Returns matched companies, students, drives, and applications
+
+  /api/admin/pending-companies:
+    get:
+      tags:
+        - Admin
+      summary: Get list of unapproved companies
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Returns array of pending company accounts
+
+  /api/admin/company-action/{company_id}:
+    post:
+      tags:
+        - Admin
+      summary: Approve, reject, or blacklist a company
+      security:
+        - BearerAuth: []
+      parameters:
+        - in: path
+          name: company_id
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - action
+              properties:
+                action:
+                  type: string
+                  enum: [approve, reject, blacklist, unblacklist]
+      responses:
+        '200':
+          description: Action processed successfully
+
+  /api/admin/drive-action/{drive_id}:
+    post:
+      tags:
+        - Admin
+      summary: Approve or reject a placement drive
+      security:
+        - BearerAuth: []
+      parameters:
+        - in: path
+          name: drive_id
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                action:
+                  type: string
+                  enum: [approve, reject]
+      responses:
+        '200':
+          description: Drive status updated
+
+  /api/admin/student-action/{student_id}:
+    post:
+      tags:
+        - Admin
+      summary: Suspend or reinstate a student
+      security:
+        - BearerAuth: []
+      parameters:
+        - in: path
+          name: student_id
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                action:
+                  type: string
+                  enum: [blacklist, unblacklist]
+      responses:
+        '200':
+          description: Student status updated
+
+  /api/admin/drive/{drive_id}/close:
+    post:
+      tags:
+        - Admin
+      summary: Admin override to close an active drive
+      security:
+        - BearerAuth: []
+      parameters:
+        - in: path
+          name: drive_id
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Drive officially closed
+
+  # ==========================================
+  # COMPANY
+  # ==========================================
+  /api/company/dashboard:
+    get:
+      tags:
+        - Company
+      summary: Fetch company dashboard data
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Returns company profile, upcoming drives, and closed drives
+
+  /api/company/profile:
+    put:
+      tags:
+        - Company
+      summary: Update company profile details
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                about_us:
+                  type: string
+                website:
+                  type: string
+                email:
+                  type: string
+      responses:
+        '200':
+          description: Profile updated successfully
+
+  /api/company/post-drive:
+    post:
+      tags:
+        - Company
+      summary: Create a new placement drive
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - job_title
+                - branch
+                - deadline
+              properties:
+                job_title:
+                  type: string
+                branch:
+                  type: string
+                min_cgpa:
+                  type: number
+                required_skills:
+                  type: string
+                deadline:
+                  type: string
+                  format: date
+      responses:
+        '201':
+          description: Job posted successfully
+
+  /api/company/drive/{drive_id}:
+    delete:
+      tags:
+        - Company
+      summary: Permanently delete a placement drive and its applications
+      security:
+        - BearerAuth: []
+      parameters:
+        - in: path
+          name: drive_id
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Successfully deleted
+
+  /api/company/drive/{drive_id}/applicants:
+    get:
+      tags:
+        - Company
+      summary: Get all applicants for a specific drive
+      security:
+        - BearerAuth: []
+      parameters:
+        - in: path
+          name: drive_id
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Returns array of student applicants
+
+  /api/company/application/{app_id}/update:
+    put:
+      tags:
+        - Company
+      summary: Update student application status
+      security:
+        - BearerAuth: []
+      parameters:
+        - in: path
+          name: app_id
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                status:
+                  type: string
+                  enum: [Applied, Shortlisted, Selected, Rejected]
+                feedback:
+                  type: string
+                interview_date:
+                  type: string
+                  format: date
+      responses:
+        '200':
+          description: Status updated
+
+  /api/company/application/{app_id}/upload-offer:
+    post:
+      tags:
+        - Company
+      summary: Upload an offer letter for a selected student
+      security:
+        - BearerAuth: []
+      parameters:
+        - in: path
+          name: app_id
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                offer_letter:
+                  type: string
+                  format: binary
+      responses:
+        '200':
+          description: Offer letter uploaded
+
+  /api/company/drive/{drive_id}/close:
+    post:
+      tags:
+        - Company
+      summary: Close an active job posting
+      security:
+        - BearerAuth: []
+      parameters:
+        - in: path
+          name: drive_id
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Job posting closed
+
+  /api/company/export-csv:
+    post:
+      tags:
+        - Company
+      summary: Trigger background Celery task for CSV export
+      security:
+        - BearerAuth: []
+      responses:
+        '202':
+          description: Export started, returns task_id
+
+  # ==========================================
+  # STUDENT
+  # ==========================================
+  /api/student/dashboard:
+    get:
+      tags:
+        - Student
+      summary: Fetch student dashboard data
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Returns student profile, available drives, and application history
+
+  /api/student/company/{company_id}:
+    get:
+      tags:
+        - Student
+      summary: View company details and specific job postings
+      security:
+        - BearerAuth: []
+      parameters:
+        - in: path
+          name: company_id
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Returns company info and application status for its drives
+
+  /api/student/history:
+    get:
+      tags:
+        - Student
+      summary: View application history
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Returns history of applied jobs
+
+  /api/student/apply/{drive_id}:
+    post:
+      tags:
+        - Student
+      summary: Apply to a placement drive
+      security:
+        - BearerAuth: []
+      parameters:
+        - in: path
+          name: drive_id
+          required: true
+          schema:
+            type: integer
+      responses:
+        '201':
+          description: Successfully applied
+        '400':
+          description: CGPA requirement not met or already applied
+        '403':
+          description: Drive deadline passed
+
+  /api/student/profile:
+    put:
+      tags:
+        - Student
+      summary: Update student profile
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                full_name:
+                  type: string
+                branch:
+                  type: string
+                cgpa:
+                  type: number
+                skills:
+                  type: string
+                experience:
+                  type: string
+      responses:
+        '200':
+          description: Profile updated
+
+  /api/student/upload-resume:
+    post:
+      tags:
+        - Student
+      summary: Upload student resume (PDF)
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                resume:
+                  type: string
+                  format: binary
+      responses:
+        '200':
+          description: Resume uploaded successfully
+
+  /api/student/export-csv:
+    post:
+      tags:
+        - Student
+      summary: Trigger background Celery task for application history export
+      security:
+        - BearerAuth: []
+      responses:
+        '202':
+          description: Export started, returns task_id
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT

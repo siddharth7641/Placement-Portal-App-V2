@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html>
+<body style="font-family: Arial, sans-serif; color: #333; padding: 20px;">
+    
+    <div style="max-width: 600px; margin: auto; border: 1px solid #ddd; border-radius: 8px; overflow: hidden;">
+        <div style="background-color: #8e44ad; color: white; padding: 20px; text-align: center;">
+            <h1 style="margin: 0;">Institute Placement Summary</h1>
+            <p style="margin: 5px 0 0 0;">Report for {{ month_name }}</p>
+        </div>
+
+        <div style="padding: 20px; background-color: #fdfdfd;">
+            <h3>Hello Admin,</h3>
+            <p>Here is the overarching automated placement activity report for the entire institute.</p>
+            
+            <div style="background-color: #f1f2f6; padding: 20px; border-radius: 5px; margin-top: 20px;">
+                <h4 style="margin-top: 0; border-bottom: 1px solid #ccc; padding-bottom: 5px;">Platform Analytics</h4>
+                <ul style="list-style-type: none; padding-left: 0; font-size: 16px;">
+                    <li style="margin-bottom: 15px;">🏢 <strong>Total Drives Conducted:</strong> {{ total_drives }}</li>
+                    <li style="margin-bottom: 15px;">📄 <strong>Total Student Applications:</strong> {{ total_apps }}</li>
+                    <li style="margin-bottom: 5px;">🎓 <strong>Total Students Selected:</strong> {{ total_selected }}</li>
+                </ul>
+            </div>
+            
+            <p style="margin-top: 25px; font-size: 14px; color: #777;">Log in to the Admin Dashboard to manage users, drives, and view detailed system logs.</p>
+        </div>
+    </div>
+
+</body>
+</html>

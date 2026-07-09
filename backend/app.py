@@ -60,23 +60,23 @@ def create_database():
 celery.conf.beat_schedule = {
     'auto-close-expired-drives': {
         'task': 'close_expired_drives',
-        'schedule': crontab(), #hour=0, minute=0
+        'schedule': crontab(hour=0, minute=0), 
     },
     'daily-interview-reminders': {
         'task': 'send_daily_interview_reminders', 
-        'schedule': crontab(), #hour=8, minute=0
+        'schedule': crontab(hour=8, minute=0), 
     },
     'monthly-company-reports': {
         'task': 'generate_monthly_company_reports',
-        'schedule': crontab(),#minute=0, hour=0, day_of_month='1'
+        'schedule': crontab(minute=0, hour=0, day_of_month='1'),
     },
     'admin-monthly-report': {
         'task': 'generate_admin_monthly_report',
-        'schedule': crontab(),#minute=0, hour=0, day_of_month='1'
+        'schedule': crontab(minute=0, hour=0, day_of_month='1'),
     },
     'daily-deadline-notifications': {
         'task': 'send_daily_deadline_reminders',
-        'schedule': crontab(), #hour=8, minute=0
+        'schedule': crontab(hour=8, minute=0),
     },
 }
 

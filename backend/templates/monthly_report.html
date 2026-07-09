@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html>
+<body style="font-family: Arial, sans-serif; color: #333; padding: 20px;">
+    
+    <div style="max-width: 600px; margin: auto; border: 1px solid #ddd; border-radius: 8px; overflow: hidden;">
+        <div style="background-color: #2c3e50; color: white; padding: 20px; text-align: center;">
+            <h1 style="margin: 0;">Monthly Placement Analytics</h1>
+            <p style="margin: 5px 0 0 0;">Report for {{ month_name }}</p>
+        </div>
+
+        <div style="padding: 20px; background-color: #fdfdfd;">
+            <h3>Hello {{ company_name }},</h3>
+            <p>Here is your automated monthly performance report across all your active placement drives.</p>
+            
+            <div style="background-color: #f1f2f6; padding: 15px; border-radius: 5px; margin-top: 20px;">
+                <h4 style="margin-top: 0; border-bottom: 1px solid #ccc; padding-bottom: 5px;">Total Applications: {{ total_apps }}</h4>
+                <ul style="list-style-type: none; padding-left: 0;">
+                    <li style="margin-bottom: 10px;">🟢 <strong>Accepted / Placed:</strong> {{ accepted }}</li>
+                    <li style="margin-bottom: 10px;">🟡 <strong>Shortlisted:</strong> {{ shortlisted }}</li>
+                    <li style="margin-bottom: 10px;">🔴 <strong>Rejected:</strong> {{ rejected }}</li>
+                </ul>
+            </div>
+            
+            <p style="margin-top: 25px; font-size: 14px; color: #777;">Log in to your dashboard to view detailed candidate profiles and export full CSV histories.</p>
+        </div>
+    </div>
+
+</body>
+</html>
